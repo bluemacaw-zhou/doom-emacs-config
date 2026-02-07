@@ -156,28 +156,29 @@ pom.xml 示例 2（使用属性）：
       <version>${lombok.version}</version>
     </dependency>
   </dependencies>"
-  (when (and (boundp 'projectile-project-root)
-             projectile-project-root)
-    (let* ((pom-file (expand-file-name "pom.xml" projectile-project-root)))
-      (when (file-exists-p pom-file)
-        (with-temp-buffer
-          (insert-file-contents pom-file)
-          ;; 查找 Lombok 依赖的版本号
-          ;; 支持两种格式：
-          ;; 1. 直接在 dependency 中指定 <version>1.18.20</version>
-          ;; 2. 使用属性 <version>${lombok.version}</version>
-          (save-excursion
-            (cond
-             ;; 尝试查找直接的 version 标签
-             ((and (re-search-forward "<groupId>org.projectlombok</groupId>\\s-*<artifactId>lombok</artifactId>\\s-*<version>\\([^<]+\\)</version>" nil t)
-                   (match-string 1)))
-             ;; 尝试查找使用属性的版本
-             ((and (re-search-forward "<groupId>org.projectlombok</groupId>\\s-*<artifactId>lombok</artifactId>\\s-*<version>\\$*{\\([^}]+\\)}</version>" nil t)
-                   (let* ((property-name (match-string 1))
-                          (property-pattern (format "<%s>\\([^<]+\\)</%s>" property-name property-name)))
-                     (goto-char (point-min))
-                     (when (re-search-forward property-pattern nil t)
-                       (match-string 1))))))))))))
+  (let ((project-root (and (fboundp 'projectile-project-root)
+                           (projectile-project-root))))
+    (when project-root
+      (let ((pom-file (expand-file-name "pom.xml" project-root)))
+        (when (file-exists-p pom-file)
+          (with-temp-buffer
+            (insert-file-contents pom-file)
+            ;; 查找 Lombok 依赖的版本号
+            ;; 支持两种格式：
+            ;; 1. 直接在 dependency 中指定 <version>1.18.20</version>
+            ;; 2. 使用属性 <version>${lombok.version}</version>
+            (save-excursion
+              (cond
+               ;; 尝试查找直接的 version 标签
+               ((and (re-search-forward "<groupId>org.projectlombok</groupId>\\s-*<artifactId>lombok</artifactId>\\s-*<version>\\([^<]+\\)</version>" nil t)
+                     (match-string 1)))
+               ;; 尝试查找使用属性的版本
+               ((and (re-search-forward "<groupId>org.projectlombok</groupId>\\s-*<artifactId>lombok</artifactId>\\s-*<version>\\$*{\\([^}]+\\)}</version>" nil t)
+                     (let* ((property-name (match-string 1))
+                            (property-pattern (format "<%s>\\([^<]+\\)</%s>" property-name property-name)))
+                       (goto-char (point-min))
+                       (when (re-search-forward property-pattern nil t)
+                         (match-string 1)))))))))))))
 
 ;;;###autoload
 (defun +my-lsp-java-get-lombok-jar-path ()

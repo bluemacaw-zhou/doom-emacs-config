@@ -84,11 +84,6 @@
         lsp-java-implementations-code-lens-enabled t)  ;; 启用实现代码透镜（显示接口实现的快速导航）
   (message "[+lsp-config] ✓ LSP Java 配置完成"))
 
-  ;; 其他 LSP Java 设置
-  (setq lsp-java-workspace-dir "C:/jdtls-workspace"  ;; JDT LS 工作空间目录（存储项目索引等）
-        lsp-java-references-code-lens-enabled t       ;; 启用引用代码透镜（显示方法/类的引用数量）
-        lsp-java-implementations-code-lens-enabled t) ;; 启用实现代码透镜（显示接口实现的快速导航）
-
 ;; ---------------------------------------------------------------------------
 ;; 自动启动 LSP（针对 Java 项目）
 ;; ---------------------------------------------------------------------------
@@ -126,70 +121,77 @@
   (message "[当前文件] %s" (or (buffer-file-name) (buffer-name)))
   (message "[当前模式] %s" major-mode)
 
-  ;; 检查 1：Projectile 是否可用
-  (message "[检查 1/4] Projectile 是否可用")
-  (if (boundp 'projectile-project-root)
-      (message "  ✓ Projectile 已加载")
-    (message "  ✗ Projectile 未加载"))
+  ;; 获取项目根目录（projectile-project-root 是函数，不是变量）
+  (let ((project-root (and (fboundp 'projectile-project-root)
+                           (projectile-project-root))))
 
-  ;; 检查 2：是否在项目中
-  (message "[检查 2/4] 当前是否在 Projectile 项目中")
-  (if (boundp 'projectile-project-root)
-      (if projectile-project-root
-          (message "  ✓ 是，项目根目录: %s" projectile-project-root)
-        (message "  ✗ 否，不在任何项目中"))
-    (message "  ✗ Projectile 未加载，无法判断"))
+    ;; 检查 1：Projectile 是否可用
+    (message "[检查 1/4] Projectile 是否可用")
+    (if (fboundp 'projectile-project-root)
+        (message "  ✓ Projectile 已加载")
+      (message "  ✗ Projectile 未加载"))
 
-  ;; 检查 3：是否存在 pom.xml
-  (when (and (boundp 'projectile-project-root) projectile-project-root)
-    (let ((pom-file (expand-file-name "pom.xml" projectile-project-root)))
-      (message "[检查 3/4] 项目根目录是否存在 pom.xml")
-      (message "  检查路径: %s" pom-file)
-      (if (file-exists-p pom-file)
-          (message "  ✓ pom.xml 存在")
-        (message "  ✗ pom.xml 不存在"))))
+    ;; 检查 2：是否在项目中
+    (message "[检查 2/4] 当前是否在 Projectile 项目中")
+    (if project-root
+        (message "  ✓ 是，项目根目录: %s" project-root)
+      (message "  ✗ 否，不在任何项目中"))
 
-  ;; 检查 4：LSP 是否已启动
-  (message "[检查 4/4] LSP 是否已启动")
-  (if (bound-and-true-p lsp-mode)
-      (message "  ✓ LSP 已启动，无需重复启动")
-    (message "  ✗ LSP 未启动，准备启动"))
+    ;; 检查 3：是否存在 pom.xml
+    (when project-root
+      (let ((pom-file (expand-file-name "pom.xml" project-root)))
+        (message "[检查 3/4] 项目根目录是否存在 pom.xml")
+        (message "  检查路径: %s" pom-file)
+        (if (file-exists-p pom-file)
+            (message "  ✓ pom.xml 存在")
+          (message "  ✗ pom.xml 不存在"))))
 
-  ;; ===== 判断是否启动 LSP =====
-  (if (and (boundp 'projectile-project-root)
-           projectile-project-root
-           (file-exists-p (expand-file-name "pom.xml" projectile-project-root))
-           (not (bound-and-true-p lsp-mode)))
+    ;; 检查 4：LSP 是否已启动
+    (message "[检查 4/4] LSP 是否已启动")
+    (if (bound-and-true-p lsp-mode)
+        (message "  ✓ LSP 已启动，无需重复启动")
+      (message "  ✗ LSP 未启动，准备启动"))
+
+    ;; ===== 判断是否启动 LSP =====
+    (if (and project-root
+             (file-exists-p (expand-file-name "pom.xml" project-root))
+             (not (bound-and-true-p lsp-mode)))
+        (progn
+          (message "")
+          (message "[LSP 自动启动] 满足所有条件，1秒后启动 LSP...")
+          ;; 延迟 1 秒启动，避免影响 Emacs 启动速度
+          (run-at-time 1 nil
+                       (lambda ()
+                         (message "[LSP 自动启动] 开始启动 LSP...")
+                         (condition-case err
+                             (progn
+                               (lsp!)
+                               (message "[LSP 自动启动] ✓ LSP 启动命令已执行")
+                               (message "[LSP 自动启动] 正在分析代码，请稍候...")
+                               (message "========================================"))
+                           (error
+                            (message "[LSP 自动启动] ✗ LSP 启动失败: %s" err)
+                            (message "========================================"))))))
       (progn
         (message "")
-        (message "[LSP 自动启动] 满足所有条件，1秒后启动 LSP...")
-        ;; 延迟 1 秒启动，避免影响 Emacs 启动速度
-        (run-at-time 1 nil
-                     (lambda ()
-                       (message "[LSP 自动启动] 开始启动 LSP...")
-                       (condition-case err
-                           (progn
-                             (lsp!)
-                             (message "[LSP 自动启动] ✓ LSP 启动命令已执行")
-                             (message "[LSP 自动启动] 正在分析代码，请稍候...")
-                             (message "========================================"))
-                         (error
-                          (message "[LSP 自动启动] ✗ LSP 启动失败: %s" err)
-                          (message "========================================"))))))
-    (progn
-      (message "")
-      (message "[LSP 自动启动] 不满足启动条件，跳过自动启动")
-      (message "========================================"))))
+        (message "[LSP 自动启动] 不满足启动条件，跳过自动启动")
+        (message "========================================")))))
 
-;; 在 java 模块加载后注册钩子
-(after! java
-  (message "[+lsp-config] 注册 Java LSP 自动启动钩子...")
-  (add-hook! 'java-mode-hook #'+my-test-java-mode-hook)
-  (add-hook! 'java-mode-hook #'+my-java-auto-start-lsp)
-  (message "[+lsp-config] ✓ Java LSP 自动启动钩子已注册")
-  (message ""))
+;; 直接注册钩子（不使用 after! java，因为 java 不是有效的 feature）
+;; 注意：同时支持 java-mode 和 java-ts-mode（tree-sitter 模式）
+(message "[+lsp-config] 注册 Java LSP 自动启动钩子...")
 
-(message "[+lsp-config] ✓ Java LSP 自动启动钩子已注册")
+;; 传统 java-mode 钩子
+(add-hook 'java-mode-hook #'+my-test-java-mode-hook)
+(add-hook 'java-mode-hook #'+my-java-auto-start-lsp)
+(message "[+lsp-config] ✓ java-mode-hook 已注册")
+
+;; tree-sitter 模式的钩子（当使用 +tree-sitter flag 时）
+(add-hook 'java-ts-mode-hook #'+my-test-java-mode-hook)
+(add-hook 'java-ts-mode-hook #'+my-java-auto-start-lsp)
+(message "[+lsp-config] ✓ java-ts-mode-hook 已注册")
+
+(message "[+lsp-config] ✓ Java LSP 自动启动钩子全部注册完成")
 (message "")
 
 ;; ============================================================================
