@@ -86,23 +86,31 @@ SETTINGS-FILE 是 settings.xml 的文件路径。
 
 返回本地仓库路径，如果解析失败则返回默认路径 ~/.m2/repository。
 
+注意：此函数从文件末尾向前搜索，确保匹配到实际生效的配置，
+而不是注释中的示例配置。
+
 settings.xml 示例：
   <settings>
     <localRepository>D:/apache-maven-3.6.3/repository</localRepository>
   </settings>"
-  (let ((default-repo "~/.m2/repository"))  ;; Maven 默认本地仓库路径
+  (let ((default-repo "~/.m2/repository")
+        (found-path nil))
     (if (and settings-file (file-exists-p settings-file))
         (with-temp-buffer
           (insert-file-contents settings-file)
-          ;; 使用正则表达式解析 <localRepository> 标签
-          (save-excursion
-            (if (re-search-forward "<localRepository>\\([^<]+\\)</localRepository>" nil t)
-                (let ((repo-path (match-string 1)))
-                  ;; 展开路径中的 ~ 为 $HOME 绝对路径（避免解析失败）
-                  (+my-lsp-expand-tilde-path repo-path))
-              ;; 文件存在但没有 <localRepository> 标签，返回默认路径
-              (+my-lsp-expand-tilde-path default-repo))))
+          ;; 从文件末尾向前搜索，找到最后一个 <localRepository>
+          ;; 这样可以跳过注释中的示例配置
+          (goto-char (point-max))
+          (if (re-search-backward "<localRepository>\\([^<]+\\)</localRepository>" nil t)
+              (let ((repo-path (string-trim (match-string 1))))
+                (message "[+lsp-helper] 解析到 Maven 本地仓库: %s" repo-path)
+                ;; 展开路径中的 ~ 为 $HOME 绝对路径（避免解析失败）
+                (+my-lsp-expand-tilde-path repo-path))
+            ;; 文件存在但没有 <localRepository> 标签，返回默认路径
+            (message "[+lsp-helper] settings.xml 中未找到 localRepository，使用默认路径")
+            (+my-lsp-expand-tilde-path default-repo)))
       ;; 文件不存在，展开默认路径
+      (message "[+lsp-helper] settings.xml 不存在: %s，使用默认路径" settings-file)
       (+my-lsp-expand-tilde-path default-repo))))
 
 ;;;###autoload
