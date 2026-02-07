@@ -33,14 +33,33 @@
 
 (after! lsp-ui
   (message "[+lsp-config] 配置 LSP UI 增强...")
-  ;; LSP UI 增强 - 显示文档、诊断信息等
+
+  ;; LSP UI Doc - 悬浮文档显示
   (setq lsp-ui-doc-enable t                        ;; 启用悬浮文档显示
         lsp-ui-doc-show-with-cursor t              ;; 光标移动时显示文档
-        lsp-ui-doc-delay 0.5                       ;; 文档显示延迟（秒）
-        lsp-ui-sideline-enable t                   ;; 启用侧边栏信息显示
+        lsp-ui-doc-delay 0.5)                      ;; 文档显示延迟（秒）
+
+  ;; LSP UI Sideline - 侧边栏信息显示
+  (setq lsp-ui-sideline-enable t                   ;; 启用侧边栏信息显示
         lsp-ui-sideline-show-code-actions t        ;; 显示代码操作提示
-        lsp-ui-sideline-show-diagnostics t)       ;; 显示诊断信息
+        lsp-ui-sideline-show-diagnostics t)        ;; 显示诊断信息
+
+  ;; LSP UI Peek - 引用/定义查找窗口（g D 使用）
+  (setq lsp-ui-peek-enable t                       ;; 启用 peek 功能
+        lsp-ui-peek-show-directory t               ;; 显示文件目录
+        lsp-ui-peek-peek-height 25                 ;; peek 窗口高度
+        lsp-ui-peek-list-width 60                  ;; 列表宽度
+        lsp-ui-peek-fontify 'on-demand             ;; 按需语法高亮
+        lsp-ui-peek-always-show t)                 ;; 即使只有一个结果也显示 peek
+
   (message "[+lsp-config] ✓ LSP UI 配置完成"))
+
+;; 绑定 g D 到 lsp-ui-peek-find-references（稳定的引用查找窗口）
+;; 这样查找引用时不会因为鼠标移动而消失，需要按 q 或 ESC 退出
+(after! lsp-mode
+  (map! :map lsp-mode-map
+        :n "g D" #'lsp-ui-peek-find-references     ;; 查找引用（peek 窗口）
+        :n "g d" #'lsp-ui-peek-find-definitions))  ;; 查找定义（peek 窗口）
 
 
 ;; ============================================================================
