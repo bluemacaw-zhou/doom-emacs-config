@@ -61,6 +61,47 @@
         :n "g D" #'lsp-ui-peek-find-references     ;; 查找引用（peek 窗口）
         :n "g d" #'lsp-ui-peek-find-definitions))  ;; 查找定义（peek 窗口）
 
+;; 修复：防止鼠标移动导致 lsp-ui-peek 窗口关闭
+;; 原理：lsp-ui-peek 使用 set-transient-map，当事件不在 keymap 中时会关闭窗口
+;; 解决：在 keymap 中添加鼠标移动事件绑定，让它被忽略
+(after! lsp-ui-peek
+  (message "[+lsp-config] 配置 lsp-ui-peek...")
+
+  ;; 在 lsp-ui-peek-mode-map 中添加鼠标移动事件绑定
+  ;; 这样鼠标移动不会导致 transient-map 失效
+  (when (boundp 'lsp-ui-peek-mode-map)
+    ;; 忽略所有鼠标移动事件
+    (define-key lsp-ui-peek-mode-map [mouse-movement] #'ignore)
+    (define-key lsp-ui-peek-mode-map [scroll-bar-movement] #'ignore)
+    ;; 忽略拖拽事件
+    (define-key lsp-ui-peek-mode-map [drag-mouse-1] #'ignore)
+    (define-key lsp-ui-peek-mode-map [drag-mouse-2] #'ignore)
+    (define-key lsp-ui-peek-mode-map [drag-mouse-3] #'ignore)
+    ;; 忽略滚轮（但可能需要保留滚轮功能，先添加看看）
+    (define-key lsp-ui-peek-mode-map [wheel-up] #'ignore)
+    (define-key lsp-ui-peek-mode-map [wheel-down] #'ignore)
+    (message "[+lsp-config] ✓ lsp-ui-peek 鼠标事件已绑定到 ignore"))
+
+  ;; 修复中文乱码：设置 lsp-ui-peek 读取文件时使用 UTF-8 编码
+  (setq lsp-ui-peek-fontify 'always)
+
+  (message "[+lsp-config] ✓ lsp-ui-peek 配置完成"))
+
+;; 修复 lsp-ui-peek 中文乱码问题
+;; 原因：lsp-ui-peek--get-xrefs-in-file 使用 insert-file-contents-literally
+;;       这个函数按字节读取文件，不进行编码转换，导致中文乱码
+;; 解决：用 advice 替换为 insert-file-contents，让 Emacs 自动检测编码
+(after! lsp-ui-peek
+  (defadvice! +lsp-ui-peek--fix-chinese-encoding-a (fn file)
+    "修复 lsp-ui-peek 中文乱码：使用 insert-file-contents 替代 literally 版本"
+    :around #'lsp-ui-peek--get-xrefs-in-file
+    (cl-letf (((symbol-function 'insert-file-contents-literally)
+               (lambda (filename &optional visit beg end replace)
+                 (insert-file-contents filename visit beg end replace))))
+      (funcall fn file)))
+
+  (message "[+lsp-config] ✓ lsp-ui-peek 中文编码修复已应用"))
+
 
 ;; ============================================================================
 ;; LSP Java 配置 - 使用环境变量和动态解析
