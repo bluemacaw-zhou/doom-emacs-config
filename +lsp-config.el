@@ -254,6 +254,37 @@
 (message "[+lsp-config] ✓ Java LSP 自动启动钩子全部注册完成")
 (message "")
 
+
+;; ============================================================================
+;; 修复 consult-lsp-diagnostics 候选项显示问题
+;; ============================================================================
+;; 问题：原始 transformer 使用 (format "%-60.60s" ...) 截断显示文本，
+;;       导致长路径的文件名后面的行号被截断。当同一文件有多个诊断时，
+;;       它们的显示文本可能相同（因为行号被截断），导致 consult 选择错误的诊断。
+;; 解决：使用短文件名 + 行号格式，确保每个候选项有唯一的显示文本。
+;; ============================================================================
+(after! consult-lsp
+  (defadvice! +my/fix-consult-lsp-transformer-a (fn file diag)
+    "修复 consult-lsp transformer：使用短文件名，确保行号不被截断"
+    :around #'consult-lsp--diagnostics--transformer
+    (let* ((line (lsp-translate-line (1+ (lsp-get (lsp-get (lsp-get diag :range) :start) :line))))
+           (short-file (file-name-nondirectory file))
+           ;; 使用短文件名 + 行号作为显示文本，末尾加空格分隔消息
+           (display-text (format "%-25s:%4d  " short-file line)))
+      (propertize display-text
+                  'consult--candidate (cons file diag)
+                  'consult--type (consult-lsp--diagnostics--severity-to-type diag)))))
+
+  ;; 确保预览时显示行号
+  (defadvice! +my/consult-lsp-marker-show-line-numbers-a (fn buffer line column)
+    "在创建 marker 时确保 buffer 显示行号"
+    :around #'consult-lsp--marker-from-line-column
+    (when (and buffer (buffer-live-p buffer))
+      (with-current-buffer buffer
+        (display-line-numbers-mode 1)))
+    (funcall fn buffer line column))
+
+
 ;; ============================================================================
 ;; LSP Pyright 配置（Python）
 ;; ============================================================================
