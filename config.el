@@ -237,6 +237,11 @@
                                            (side . bottom)
                                            (slot . 6)))))
 
+;; vterm 以独立全屏 buffer 打开（而非底部弹窗），方便与 Claude Code 等工具交互
+;; 切换回代码：SPC b b 选 buffer，或 SPC ` 切上一个 buffer
+(map! :leader
+      :desc "Open vterm in buffer" "o t" #'+vterm/here)
+
 ;; 窗口管理快捷键
 (map! :leader
       :desc "Delete other windows" "w D" #'doom/kill-other-buffers-and-windows
