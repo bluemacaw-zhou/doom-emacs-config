@@ -32,7 +32,7 @@
 ;; There are two ways to load a theme. Both assume the theme is installed and
 ;; available. You can either set `doom-theme' or manually load a theme with the
 ;; `load-theme' function. This is the default:
-(setq doom-theme 'doom-one)
+(setq doom-theme 'doom-gruvbox)
 
 ;; This determines the style of line numbers in effect. If set to `nil', line
 ;; numbers are disabled. For relative line numbers, set this to `relative'.
@@ -91,6 +91,14 @@
 ;; 全局编码修正 - 确保 UTF-8 编码在所有情况下正确处理
 (set-selection-coding-system 'utf-8)
 (prefer-coding-system 'utf-8)
+
+;; ============================================================================
+;; Emacs 环境变量配置 - 不影响系统环境
+;; ============================================================================
+;; 在 +env.el 中定义 Emacs 专用的环境变量（JAVA_HOME、MAVEN_HOME 等）
+;; 这些变量只在 Emacs 内生效，保持系统环境变量干净
+;;
+(load! "+env")
 
  ;; ============================================================================
   ;; LSP 配置 - 加载独立配置文件
