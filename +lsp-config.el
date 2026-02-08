@@ -139,7 +139,7 @@
     (message "[+lsp-config] ✓ JVM 参数已配置（%d 项参数）" (length vmargs)))
 
   ;; 其他 LSP Java 设置
-  (setq lsp-java-workspace-dir "C:/jdtls-workspace"  ;; JDT LS 工作空间目录（存储项目索引等）
+  (setq lsp-java-workspace-dir +my-jdtls-workspace-dir  ;; JDT LS 工作空间目录（存储项目索引等）
         lsp-java-references-code-lens-enabled t       ;; 启用引用代码透镜（显示方法/类的引用数量）
         lsp-java-implementations-code-lens-enabled t)  ;; 启用实现代码透镜（显示接口实现的快速导航）
   (message "[+lsp-config] ✓ LSP Java 配置完成"))
