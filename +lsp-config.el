@@ -177,6 +177,22 @@
 (add-hook 'java-ts-mode-hook #'+my-java-auto-start-lsp)
 (message "[+lsp-config] ✓ Java LSP 自动启动钩子已注册")
 
+;; ---------------------------------------------------------------------------
+;; Maven 项目编译命令
+;; ---------------------------------------------------------------------------
+
+(defun +my-java-set-compile-command ()
+  "为 Maven 项目设置 compile-command 为 mvn clean compile。
+检测项目根目录是否有 pom.xml，如果有则自动 cd 到项目根目录执行。"
+  (when-let ((root (and (fboundp 'projectile-project-root)
+                        (projectile-project-root))))
+    (when (file-exists-p (expand-file-name "pom.xml" root))
+      (setq-local compile-command
+                  (concat "cd " (shell-quote-argument root) " && mvn clean compile")))))
+
+(add-hook 'java-mode-hook #'+my-java-set-compile-command)
+(add-hook 'java-ts-mode-hook #'+my-java-set-compile-command)
+(message "[+lsp-config] ✓ Maven 编译命令钩子已注册")
 
 ;; ============================================================================
 ;; 修复 consult-lsp-diagnostics 候选项显示问题
