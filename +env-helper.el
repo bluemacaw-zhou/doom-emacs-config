@@ -1,7 +1,7 @@
-;;; +lsp-helper.el -*- lexical-binding: t; no-byte-compile: t; -*-
+;;; +env-helper.el -*- lexical-binding: t; no-byte-compile: t; -*-
 ;;
-;; LSP 辅助函数 - 纯 Elisp 实现，不依赖 Doom 宏
-;; =========================================
+;; 环境变量与路径解析辅助函数 - 纯 Elisp 实现，不依赖 Doom 宏
+;; 职责：从 JAVA_HOME / MAVEN_HOME / pom.xml 等来源解析运行时路径
 ;;
 
 ;;;###autoload
@@ -93,49 +93,54 @@ settings.xml 示例：
   <settings>
     <localRepository>D:/apache-maven-3.6.3/repository</localRepository>
   </settings>"
-  (let ((default-repo "~/.m2/repository")
-        (found-path nil))
+  (let ((default-repo "~/.m2/repository"))
     (if (and settings-file (file-exists-p settings-file))
         (with-temp-buffer
           (insert-file-contents settings-file)
-          ;; 从文件末尾向前搜索，找到最后一个 <localRepository>
-          ;; 这样可以跳过注释中的示例配置
-          (goto-char (point-max))
-          (if (re-search-backward "<localRepository>\\([^<]+\\)</localRepository>" nil t)
-              (let ((repo-path (string-trim (match-string 1))))
-                (message "[+lsp-helper] 解析到 Maven 本地仓库: %s" repo-path)
-                ;; 展开路径中的 ~ 为 $HOME 绝对路径（避免解析失败）
+          ;; 先移除所有 XML 注释 <!-- ... -->，避免匹配到注释中的示例
+          (goto-char (point-min))
+          (while (re-search-forward "<!--\\(.\\|\n\\)*?-->" nil t)
+            (replace-match ""))
+          ;; 在去除注释后的内容中搜索 <localRepository>
+          (goto-char (point-min))
+          (if (re-search-forward "<localRepository>\\([^<]+\\)</localRepository>" nil t)
+              (let* ((raw-path (string-trim (match-string 1)))
+                     ;; 替换 Maven 变量 ${user.home} 为实际主目录
+                     (repo-path (replace-regexp-in-string
+                                 "\\${user\\.home}"
+                                 (or (getenv "HOME") "~")
+                                 raw-path)))
+                (message "[+env-helper] 解析到 Maven 本地仓库: %s" repo-path)
                 (+my-lsp-expand-tilde-path repo-path))
-            ;; 文件存在但没有 <localRepository> 标签，返回默认路径
-            (message "[+lsp-helper] settings.xml 中未找到 localRepository，使用默认路径")
+            (message "[+env-helper] settings.xml 中未找到 localRepository，使用默认路径")
             (+my-lsp-expand-tilde-path default-repo)))
-      ;; 文件不存在，展开默认路径
-      (message "[+lsp-helper] settings.xml 不存在: %s，使用默认路径" settings-file)
+      (message "[+env-helper] settings.xml 不存在: %s，使用默认路径" settings-file)
       (+my-lsp-expand-tilde-path default-repo))))
 
 ;;;###autoload
 (defun +my-lsp-java-get-maven-local-repo ()
   "获取 Maven 本地仓库路径。
 
-查找顺序：
-1. $MAVEN_HOME/conf/settings.xml 中的 <localRepository>
-2. ~/.m2/settings.xml 中的 <localRepository>
-3. 默认路径 ~/.m2/repository
+查找顺序（区分平台）：
+- macOS/Linux: 优先 ~/.m2/settings.xml，回退到全局
+- Windows: 优先 $MAVEN_HOME/conf/settings.xml，回退到用户级
+  （Windows 下 C 盘空间有限，通常在全局配置中指定其他盘的仓库路径）
 
 返回示例：D:/apache-maven-3.6.3/repository"
   (let* ((maven-home (+my-lsp-java-get-maven-home))
          (global-settings (when maven-home
                             (expand-file-name "conf/settings.xml" maven-home)))
-         ;; 先展开 ~ 路径为绝对路径，避免解析失败
-         (user-settings (+my-lsp-expand-tilde-path "~/.m2/settings.xml")))
+         (user-settings (+my-lsp-expand-tilde-path "~/.m2/settings.xml"))
+         ;; Windows 优先全局配置，macOS/Linux 优先用户配置
+         (primary (if (eq system-type 'windows-nt) global-settings user-settings))
+         (fallback (if (eq system-type 'windows-nt) user-settings global-settings)))
     (cond
-     ((and global-settings (file-exists-p global-settings))
-      (+my-lsp-java-parse-maven-settings global-settings))
-     ((and user-settings (file-exists-p user-settings))
-      (+my-lsp-java-parse-maven-settings user-settings))
+     ((and primary (file-exists-p primary))
+      (+my-lsp-java-parse-maven-settings primary))
+     ((and fallback (file-exists-p fallback))
+      (+my-lsp-java-parse-maven-settings fallback))
      (t
       (message "使用默认 Maven 仓库路径")
-      ;; 展开 ~ 为绝对路径
       (+my-lsp-expand-tilde-path "~/.m2/repository")))))
 
 ;;;###autoload
@@ -245,4 +250,4 @@ pom.xml 示例 2（使用属性）：
      (when lombok-jar
        (list (format "-javaagent:%s" lombok-jar))))))
 
-(provide 'lsp-helper)
+(provide 'env-helper)

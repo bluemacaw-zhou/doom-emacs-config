@@ -52,3 +52,7 @@
 ;; (unpin! pinned-package another-pinned-package)
 ;; ...Or *all* packages (NOT RECOMMENDED; will likely break things)
 ;; (unpin! t)
+
+;; Terminal-compatible icons (nerd-icons works with Nerd Fonts in terminal)
+(package! nerd-icons)
+(package! treemacs-nerd-icons)

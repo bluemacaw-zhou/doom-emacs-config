@@ -26,9 +26,13 @@
         read-process-output-max (* 3 1024 1024)     ;; 提高 LSP 通信缓冲区大小（3MB）
         lsp-idle-delay 0.500                         ;; LSP 触发延迟（秒）
 
-        ;; Windows 下禁用文件监视，避免性能问题
+        ;; 文件监视
         lsp-enable-file-watchers nil                ;; 禁用文件变化监视
-        lsp-file-watch-threshold 5000)             ;; 文件监视阈值
+        lsp-file-watch-threshold 5000              ;; 文件监视阈值
+
+        ;; 性能优化 - 防止 buffer 多时 code action 卡死
+        lsp-keep-workspace-alive nil               ;; 关闭 buffer 后释放对应 workspace
+        lsp-response-timeout 5)                    ;; LSP 请求超时（秒），避免无限等待
   (message "[+lsp-config] ✓ LSP 通用设置配置完成"))
 
 (after! lsp-ui
@@ -124,6 +128,20 @@
 
 (after! lsp-java
   (message "[+lsp-config] 配置 LSP Java...")
+
+  ;; 锁定 jdtls 1.38.0（最后一个支持 Java 17 的版本）
+  ;; jdtls >= 1.39.0 要求 Java 21 运行时，与当前 JDK 17 不兼容
+  (setq lsp-java-jdt-download-url
+        "https://download.eclipse.org/jdtls/milestones/1.38.0/jdt-language-server-1.38.0-202408011337.tar.gz")
+  (message "[+lsp-config] ✓ jdtls 版本锁定为 1.38.0（Java 17 兼容）")
+
+  ;; ARM Mac 需要使用 config_mac_arm，lsp-java 默认只识别 config_mac（x86_64）
+  (when (and (eq system-type 'darwin)
+             (string= (car (split-string system-configuration "-")) "aarch64"))
+    (let ((arm-config (expand-file-name "config_mac_arm" lsp-java-server-install-dir)))
+      (when (file-directory-p arm-config)
+        (setq lsp-java-server-config-dir arm-config)
+        (message "[+lsp-config] ✓ 使用 ARM 配置: %s" arm-config))))
 
   ;; 动态获取 Java 路径（从环境变量 JAVA_HOME）
   (let ((java-path (+my-lsp-java-get-java-path)))
@@ -240,6 +258,74 @@
   (lsp-treemacs-sync-mode 1))  ;; 启用 Treemacs 与 LSP 的同步显示
 
 ;; ============================================================================
+;; Magit Pull 后自动重置 LSP（处理文件 rename/delete）
+;; ============================================================================
+;; 问题：git pull 后文件可能被 rename 或 delete，但 LSP 仍持有旧索引。
+;;       此时 Emacs 打开旧路径会被当成新文件，LSP 自动保存导致创建空文件覆盖原内容。
+;; 解决：在 magit pull 完成后：
+;;   1. 关闭所有已删除/renamed 文件的 buffer
+;;   2. revert 所有仍然存在的 Java buffer
+;;   3. 重启 LSP workspace（清除旧索引）
+;; ============================================================================
+
+(defun +my-lsp-cleanup-buffers-and-cache ()
+  "清理已删除文件的 buffer、刷新现有 buffer、重置 projectile 缓存和 LSP。
+不依赖当前 buffer 的 lsp-mode 状态，遍历所有 buffer 处理。"
+  (interactive)
+  (message "[LSP] 检测到 git 操作，正在清理...")
+
+  ;; 1. 关闭所有已不存在于磁盘的 Java buffer（被 rename/delete 的文件）
+  (dolist (buf (buffer-list))
+    (when-let ((file (buffer-file-name buf)))
+      (when (and (string-suffix-p ".java" file)
+                 (not (file-exists-p file)))
+        (message "[LSP] 关闭已删除文件的 buffer: %s" (buffer-name buf))
+        (kill-buffer buf))))
+
+  ;; 2. Revert 所有仍存在且未修改的 Java buffer（刷新文件内容）
+  (dolist (buf (buffer-list))
+    (when-let ((file (buffer-file-name buf)))
+      (when (and (string-suffix-p ".java" file)
+                 (file-exists-p file)
+                 (not (buffer-modified-p buf)))
+        (with-current-buffer buf
+          (revert-buffer t t t)
+          (message "[LSP] 已刷新 buffer: %s" (buffer-name buf))))))
+
+  ;; 3. 清理 projectile 文件缓存（避免 SPC SPC 显示已删除/renamed 的旧文件）
+  (when (fboundp 'projectile-invalidate-cache)
+    (projectile-invalidate-cache nil)
+    (message "[LSP] ✓ projectile 缓存已清理"))
+
+  ;; 4. 重置 +my-java-lsp-started-projects，允许 LSP 重新初始化
+  (setq +my-java-lsp-started-projects nil)
+
+  ;; 5. 重启 LSP workspace（清除 jdtls 的旧索引）
+  ;;    延迟 1 秒等待 buffer 清理完成
+  (run-at-time 1 nil
+               (lambda ()
+                 (condition-case err
+                     (let ((lsp-buf (cl-find-if
+                                     (lambda (b)
+                                       (with-current-buffer b
+                                         (bound-and-true-p lsp-mode)))
+                                     (buffer-list))))
+                       (when lsp-buf
+                         (with-current-buffer lsp-buf
+                           (lsp-restart-workspace)
+                           (message "[LSP] ✓ workspace 已重启，重新分析代码..."))))
+                   (error
+                    (message "[LSP] workspace 重启失败: %s" err))))))
+
+;; 绑定快捷键：SPC g r 手动触发项目刷新
+;; 在 git pull 后手动执行，清理旧 buffer、刷新文件、重置 projectile 和 LSP
+(map! :leader
+      :desc "刷新项目（清理旧buffer/LSP/projectile）"
+      "g r" #'+my-lsp-cleanup-buffers-and-cache)
+
+(message "[+lsp-config] ✓ SPC g r 已绑定到项目刷新命令")
+
+;; ============================================================================
 ;; 诊断和调试命令
 ;; ============================================================================
 
@@ -286,3 +372,63 @@
 ;; 在 *Messages* buffer 中也显示详细信息
 (with-current-buffer "*Messages*"
   (message ""))
+
+;; ============================================================================
+;; DAP Java 配置 - 调试支持（dap-mode，与 dape 共存）
+;; ============================================================================
+;; dape 不原生支持 Java；Java 调试用 dap-mode + dap-java
+;; dap-java 通过 jdtls 内置的 java.debug.plugin.jar 驱动，支持 launch 模式
+;;
+;; 调试流程：
+;;   1. SPC d j  → 打断点（dap-breakpoint-toggle）
+;;   2. M-x dap-java-debug → 选模板 → 回车（直接 launch，从 main 开始可断点）
+;; ============================================================================
+
+(after! dap-mode
+  ;; 必须显式加载 dap-ui（dap-mode.el 不自动 require 它）
+  (require 'dap-ui)
+
+  ;; 启用 dap-ui-mode（向 dap-breakpoints-changed-hook 注册 overlay 刷新函数）
+  (dap-ui-mode 1)
+
+  ;; 直接设置断点行背景色（set-face-attribute 比 custom-set-faces! 更可靠）
+  ;; pending = 暗红（未经调试器确认），verified = 暗绿（调试中已确认）
+  (with-eval-after-load 'dap-ui
+    (set-face-attribute 'dap-ui-pending-breakpoint-face nil
+                        :background "#4a0000" :extend t)
+    (set-face-attribute 'dap-ui-verified-breakpoint-face nil
+                        :background "#003a00" :extend t))
+
+  ;; dap-mode 挂在 Java buffer hook 上
+  (add-hook 'java-mode-hook #'dap-mode)
+  (add-hook 'java-ts-mode-hook #'dap-mode)
+
+  (require 'dap-java)
+
+  ;; im-msgsvr Spring Boot 启动调试模板
+  (dap-register-debug-template
+   "im-msgsvr :: Spring Boot"
+   (list :type "java"
+         :request "launch"
+         :name "im-msgsvr :: Spring Boot"
+         :mainClass "io.bluemacaw.msgsvr.Application"
+         :projectName "im-msgsvr"
+         :vmArgs "-Dfile.encoding=UTF-8"
+         :args ""))
+
+  (message "[+lsp-config] ✓ dap-java 调试模板已注册"))
+
+;; Java mode 下用 dap-mode 覆盖 dape 的 SPC d 快捷键
+;; Python/Go 等其他语言仍走 dape 的默认绑定
+(map! :map (java-mode-map java-ts-mode-map)
+      :leader
+      :prefix "d"
+      :desc "断点 开/关"       "b" #'dap-breakpoint-toggle
+      :desc "启动调试"         "d" #'dap-java-debug
+      :desc "求值光标处变量"   "e" #'dap-eval-thing-at-point
+      :desc "求值输入表达式"   "E" #'dap-eval
+      :desc "继续运行"         "c" #'dap-continue
+      :desc "单步跳过"         "n" #'dap-next
+      :desc "单步进入"         "i" #'dap-step-in
+      :desc "单步跳出"         "o" #'dap-step-out
+      :desc "停止调试"         "q" #'dap-disconnect)

@@ -1,0 +1,5 @@
+# Emacs Custom 系统自动生成，含本机状态（safe-local-variable 等），不纳入版本控制
+custom.el
+
+# macOS 目录元数据
+.DS_Store
