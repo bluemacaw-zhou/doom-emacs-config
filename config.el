@@ -22,7 +22,7 @@
 ;; accept. For example:
 ;;
 ;; 字体配置 - 根据需要调整 :size 参数
-(setq doom-font (font-spec :family "Consolas" :size 16)
+(setq doom-font (font-spec :family "JetBrainsMono Nerd Font" :size 16)
       doom-variable-pitch-font (font-spec :family "Arial" :size 16))
 ;;
 ;; If you or Emacs can't find your font, use 'M-x describe-font' to look them
@@ -110,6 +110,13 @@
             (lambda ()
               (setq buffer-file-coding-system 'gbk))))
 
+;; mac相关的配置
+;; 全局共享剪切板
+(setq select-enable-clipboard t)
+
+;; meta键不起作用
+(setq mac-option-modifier 'meta)
+
 ;; ============================================================================
 ;; Emacs 环境变量配置 - 不影响系统环境
 ;; ============================================================================
@@ -117,6 +124,76 @@
 ;; 这些变量只在 Emacs 内生效，保持系统环境变量干净
 ;;
 (load! "+env")
+
+;; ============================================================================
+;; Treemacs 配置
+;; ============================================================================
+(after! treemacs
+  (require 'treemacs-nerd-icons)
+  (treemacs-load-theme "nerd-icons"))
+
+;; lsp-treemacs：Treemacs 侧边栏与 LSP workspace 同步
+(after! lsp-treemacs
+  (lsp-treemacs-sync-mode 1))
+
+;; ============================================================================
+;; Magit 配置
+;; ============================================================================
+;; git pull 后刷新 LSP（处理文件 rename/delete）
+;; 问题：文件被 rename/delete 后 LSP 持有旧索引，打开旧路径会创建空文件覆盖原内容
+;; 解决：SPC g r 手动触发：关闭旧 buffer → revert 现有 buffer → 重启 LSP workspace
+
+(defun +my-lsp-cleanup-buffers-and-cache ()
+  "清理已删除文件的 buffer，刷新现有 buffer，重置 projectile 缓存和 LSP workspace。"
+  (interactive)
+  (message "[Magit] 正在清理...")
+
+  ;; 1. 关闭磁盘上已不存在的 Java buffer
+  (dolist (buf (buffer-list))
+    (when-let ((file (buffer-file-name buf)))
+      (when (and (string-suffix-p ".java" file)
+                 (not (file-exists-p file)))
+        (message "[Magit] 关闭已删除文件的 buffer: %s" (buffer-name buf))
+        (kill-buffer buf))))
+
+  ;; 2. Revert 仍存在且未修改的 Java buffer
+  (dolist (buf (buffer-list))
+    (when-let ((file (buffer-file-name buf)))
+      (when (and (string-suffix-p ".java" file)
+                 (file-exists-p file)
+                 (not (buffer-modified-p buf)))
+        (with-current-buffer buf
+          (revert-buffer t t t)))))
+
+  ;; 3. 清理 projectile 缓存
+  (when (fboundp 'projectile-invalidate-cache)
+    (projectile-invalidate-cache nil)
+    (message "[Magit] ✓ projectile 缓存已清理"))
+
+  ;; 4. 重置 Java LSP 已启动项目列表
+  (when (boundp '+my-java-lsp-started-projects)
+    (setq +my-java-lsp-started-projects nil))
+
+  ;; 5. 重启 LSP workspace（延迟 1 秒等待 buffer 清理完成）
+  (run-at-time 1 nil
+               (lambda ()
+                 (condition-case err
+                     (let ((lsp-buf (cl-find-if
+                                     (lambda (b)
+                                       (with-current-buffer b
+                                         (bound-and-true-p lsp-mode)))
+                                     (buffer-list))))
+                       (when lsp-buf
+                         (with-current-buffer lsp-buf
+                           (lsp-restart-workspace)
+                           (message "[Magit] ✓ LSP workspace 已重启"))))
+                   (error
+                    (message "[Magit] ✗ LSP workspace 重启失败: %s" err))))))
+
+;; SPC g r → git pull 后手动触发
+(map! :leader
+      :desc "刷新项目（清理旧buffer/LSP/projectile）"
+      "g r" #'+my-lsp-cleanup-buffers-and-cache)
 
  ;; ============================================================================
  ;; LSP 配置 - 加载独立配置文件
@@ -130,9 +207,12 @@
 
  (message "")
  (message "========================================")
- (message "[配置加载] 开始加载 LSP 配置...")
+ (message "[配置加载] 开始加载 LSP / Debug 配置...")
  (message "========================================")
- (load! "+lsp-config")
- (message "[配置加载] ✓ LSP 配置加载完成")
+ (load! "+lsp-common")   ;; lsp-mode 通用、lsp-ui、consult-lsp
+ (load! "+lsp-java")     ;; lsp-java、auto-start、maven、git 刷新
+ (load! "+lsp-python")   ;; lsp-pyright
+ (load! "+debug-java")   ;; dap-mode + dap-java，Java 调试快捷键
+ (message "[配置加载] ✓ LSP / Debug 配置加载完成")
  (message "========================================")
  (message "")

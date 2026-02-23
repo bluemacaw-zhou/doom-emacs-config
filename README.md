@@ -191,6 +191,47 @@ SPC w c        - 关闭当前窗口
 
 ---
 
+## Magit Git 操作
+
+### 打开 Magit
+
+```
+SPC g g        - 打开 Magit Status 界面
+?              - 在 Magit 中查看所有可用快捷键
+```
+
+### 分支操作
+
+```
+b b            - 切换分支（checkout）
+b c            - 创建新分支
+b x            - 删除分支（本地或远程）
+```
+
+### 推送操作
+
+```
+P p            - 推送当前分支到远程
+```
+
+### 常见场景
+
+#### 切换分支并删除旧分支
+
+1. `SPC g g` 打开 Magit
+2. `b b` 切换到目标分支（如 master）
+3. `b x` 删除本地旧分支（如 main）
+4. `b x` 选择 `origin/main` 删除远程旧分支
+5. `P p` 推送
+
+#### 注意事项
+
+- 删除远程默认分支会被 GitHub 拒绝（`refusing to delete the current branch`）
+- 需要先在 GitHub → Settings → General → Default branch 修改默认分支后才能删除
+- 如果处于 `HEAD detached` 状态，说明没有本地分支，需要 `b c` 基于远程分支创建本地分支
+
+---
+
 ## 后续记录
 
 探索后在此记录：
