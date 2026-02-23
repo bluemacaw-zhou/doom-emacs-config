@@ -49,10 +49,46 @@ SPC o p        - 打开 Treemacs（文件目录树）
 SPC o t        - 打开 vterm（终端）
 ```
 
-### 查看 Git 状态
+### Git 操作（Magit）
 
 ```
-SPC g g        - 打开 Magit（Git 界面）
+SPC g g        - 打开 Magit Status（Git 界面）
+```
+
+**查看变更**：
+```
+TAB            - 展开/折叠当前文件的 diff
+d d            - 查看未暂存的变更（unstaged diff）
+d s            - 查看已暂存的变更（staged diff）
+```
+
+**暂存文件（Stage）**：
+```
+s              - 暂存当前文件（包括未追踪文件）
+S              - 暂存所有文件
+u              - 取消暂存
+U              - 取消暂存所有
+```
+
+**提交（Commit）**：
+```
+c c            - 提交（打开编辑器写提交信息）
+                 写完后 C-c C-c 确认，C-c C-k 取消
+c a            - 修改上次提交（amend）
+```
+
+**推送/拉取**：
+```
+P p            - 推送到远程（密码栏填 Personal Access Token）
+F p            - 拉取远程
+```
+
+**提交信息写法**：
+```
+Fix xxx        - 修复问题
+Add xxx        - 新增功能
+Update xxx     - 修改已有功能
+Remove xxx     - 删除
 ```
 
 ### 在项目中查找文件
