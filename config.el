@@ -21,9 +21,21 @@
 ;; See 'C-h v doom-font' for documentation and more examples of what they
 ;; accept. For example:
 ;;
-;; 字体配置 - 根据需要调整 :size 参数
-(setq doom-font (font-spec :family "JetBrainsMono Nerd Font" :size 16)
-      doom-variable-pitch-font (font-spec :family "Arial" :size 16))
+;; 字体配置：自动选择本机可用字体，避免缺字导致启动失败
+(defun +my-first-available-font (candidates)
+  "返回 CANDIDATES 中第一个已安装字体名；若都不可用返回 nil。"
+  (catch 'found
+    (dolist (name candidates)
+      (when (find-font (font-spec :family name))
+        (throw 'found name)))
+    nil))
+
+(let ((mono (+my-first-available-font
+             '("JetBrainsMono Nerd Font" "Consolas" "Cascadia Mono" "Courier New")))
+      (var  (+my-first-available-font
+             '("Arial" "Segoe UI" "Helvetica"))))
+  (setq doom-font (font-spec :family (or mono "Consolas") :size 16)
+        doom-variable-pitch-font (font-spec :family (or var "Arial") :size 16)))
 ;;
 ;; If you or Emacs can't find your font, use 'M-x describe-font' to look them
 ;; up, `M-x eval-region' to execute elisp code, and 'M-x doom/reload-font' to
@@ -97,25 +109,16 @@
 ;; 1. Emacs 内部编码设置
 (prefer-coding-system 'utf-8)           ; Emacs 内部优先使用 UTF-8
 (set-selection-coding-system 'utf-8)   ; 剪贴板使用 UTF-8
-
-;; 2. 进程输出编码设置（关键！）
-(when (eq system-type 'windows-nt)
-  ;; Windows 下外部进程（mvn, javac 等）输出是 GBK 编码
-  ;; 设置进程输出用 GBK 解码，输入用 GBK 编码
-  (setq locale-coding-system 'gbk)
-  (setq default-process-coding-system '(gbk . gbk))
-
-  ;; 针对 compilation-mode 专门设置
-  (add-hook 'compilation-mode-hook
-            (lambda ()
-              (setq buffer-file-coding-system 'gbk))))
-
-;; mac相关的配置
-;; 全局共享剪切板
+;; 全局共享系统剪贴板（跨平台）
 (setq select-enable-clipboard t)
 
-;; meta键不起作用
-(setq mac-option-modifier 'meta)
+;; 2. Windows 专属配置拆分到独立文件，仅在 Windows 加载
+(when (eq system-type 'windows-nt)
+  (load! "+windows"))
+
+;; 3. macOS 专属配置拆分到独立文件，仅在 macOS 加载
+(when (eq system-type 'darwin)
+  (load! "+mac"))
 
 ;; ============================================================================
 ;; Emacs 环境变量配置 - 不影响系统环境
